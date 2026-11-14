@@ -96,14 +96,16 @@ def create_app(
         return None
 
     # 6. 模板只读显示辅助上下文（不做业务计算）
+    def media_img_url(rel_path: str | None) -> str:
+        clean = (rel_path or "").strip().lstrip("/")
+        return f"/media-cache/{clean}" if clean else ""
+
+    app.jinja_env.globals["media_img_url"] = media_img_url
+    app.jinja_env.globals["site_name"] = "影库"
+
     @app.context_processor
     def _inject_view_helpers() -> dict[str, Any]:
         s = cfg.settings
-
-        def media_img_url(rel_path: str | None) -> str:
-            clean = (rel_path or "").strip().lstrip("/")
-            return f"/media-cache/{clean}" if clean else ""
-
         return {
             "media_img_url": media_img_url,
             "site_name": "影库",

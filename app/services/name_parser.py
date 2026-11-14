@@ -56,7 +56,7 @@ CN_EP_ONLY_RE = re.compile(r"第\s*([0-9一二三四五六七八九十百]{1,4})
 EP_PREFIX_RE = re.compile(r"(?:^|[\s._\-\[\(])EP?(\d{1,3})(?:$|[\s._\-\]\)])", re.IGNORECASE)
 BRACKET_EP_RE = re.compile(r"\[(\d{2,3})\](?!\s*[pP])")
 
-YEAR_RE = re.compile(r"(?:^|[\s._\(\[（【\-])((?:19\d{2}|20[0-3]\d))(?:$|[\s._\)\]）】\-])")
+YEAR_RE = re.compile(r"(?:(?<=^)|(?<=[\s._\(\[（【\-]))((?:19\d{2}|20[0-3]\d))(?=$|[\s._\)\]）】\-])")
 
 # 非影视教程/课件特征词（用于降低误判置信度，归入待核对/未识别）
 NON_MEDIA_KEYWORDS = (
@@ -484,13 +484,12 @@ def restore_obfuscated_title(
         is_obfuscated = True
         rules.append("繁体字转为简体中文")
 
-    # Step C: 检查是否命中防和谐夹杂拼音/谐音词典（忽略大小写和空格后匹配）
+    # Step C: 检查是否命中防和谐夹杂拼音/谐音词典（忽略大小写与词内空格后匹配，同时保留英文副标题空格）
     compact_lower = text.replace(" ", "").lower()
     for obf_key, canonical in OBFUSCATED_PHRASE_MAP.items():
         if obf_key.lower() in compact_lower:
-            idx = compact_lower.find(obf_key.lower())
-            # 若整体就是该词或包含中英双语后缀
-            text = re.sub(re.escape(obf_key), canonical, text.replace(" ", ""), flags=re.IGNORECASE)
+            spaced_pat = r"\s*".join(re.escape(ch) for ch in obf_key)
+            text = re.sub(spaced_pat, canonical, text, flags=re.IGNORECASE)
             is_obfuscated = True
             rules.append(f"还原防和谐谐音/拼音改写「{obf_key} → {canonical}」")
             break
