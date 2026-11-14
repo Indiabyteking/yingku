@@ -102,50 +102,53 @@
 }
 
 /* 全局排版与消除浏览器默认蓝框 */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    transition: background-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font-family: inherit;
+    accent-color: var(--accent);
+  }
+
+  :focus {
+    outline: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--accent);
+    color: var(--accent-fg);
+  }
 }
 
-html {
-  background-color: var(--bg-canvas);
-  color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background-color: var(--bg-canvas);
-  color: var(--text-primary);
-  transition: background-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
-}
-
-input,
-select,
-textarea,
-button {
-  font-family: inherit;
-  accent-color: var(--accent);
-}
-
-:focus {
-  outline: none;
-}
-
-:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-::selection {
-  background-color: var(--accent);
-  color: var(--accent-fg);
-}
-
+@layer components {
 /* 统一页面容器：保证顶栏、大横幅文字、各轨道与网格左右成严格竖线 */
 .page-container {
   width: 100%;
@@ -699,6 +702,12 @@ button {
   box-shadow: var(--shadow-elevated);
   font-size: 0.875rem;
   animation: toast-in var(--dur-base) var(--ease-out);
+}
+}
+
+[hidden],
+.modal-backdrop.hidden {
+  display: none !important;
 }
 
 @keyframes toast-in {
