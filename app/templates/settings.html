@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-container py-8 space-y-6">
+  <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+    <div class="space-y-1">
+      <h1 class="text-2xl font-bold tracking-tight">系统设置</h1>
+      <p class="text-sm" style="color: var(--text-secondary);">
+        管理外部服务密钥与本机播放器路径，修改保存后自动写回 <code class="px-1.5 py-0.5 rounded text-xs" style="background: var(--bg-subtle);">.env</code> 并立即生效。
+      </p>
+    </div>
+    <div class="flex items-center gap-2.5 shrink-0">
+      <button type="button" id="btn-check-all-services" class="btn-secondary">一键检测全部状态</button>
+      <button type="button" id="btn-save-settings" class="btn-primary">保存全部设置</button>
+    </div>
+  </div>
+
+  {% if vm.degraded_notices %}
+  <div id="degraded-banner" class="surface-card p-4 sm:p-5 space-y-1.5" style="border-color: var(--border-strong);">
+    <div class="text-xs font-semibold uppercase tracking-wider" style="color: var(--status-warn-fg);">当前启用了功能降级模式 · 可随时补填</div>
+    {% for notice in vm.degraded_notices %}
+    <p class="text-xs sm:text-sm leading-relaxed" style="color: var(--text-secondary);">• {{ notice }}</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <form id="settings-config-form" class="space-y-5" onsubmit="return false;">
+    {% for g in vm.guides %}
+    {% set st = vm.statuses[g.id] %}
+    <section class="surface-card p-6 sm:p-7 space-y-4" data-service-id="{{ g.id }}">
+      <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b" style="border-color: var(--border-subtle);">
+        <div class="flex items-center gap-3 flex-wrap">
+          <h2 class="text-base font-bold">{{ g.title }}</h2>
+          <span class="text-xs px-2 py-0.5 rounded-full" style="background: var(--bg-subtle); color: var(--text-muted);">{{ g.badge }}</span>
+          <span class="status-pill" data-status-badge="{{ g.id }}" data-state="{{ st.state }}">{{ st.label }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <a href="{{ g.guide_url }}" target="_blank" rel="noopener noreferrer" class="btn-ghost text-xs">获取地址 ↗</a>
+          <button type="button" data-check-service="{{ g.id }}" class="btn-secondary !py-1.5 !px-3.5 text-xs">检测连接</button>
+        </div>
+      </div>
+
+      <p class="text-xs leading-relaxed" style="color: var(--text-secondary);">{{ g.purpose }}</p>
+
+      <div>
+        {% if g.id == 'alist' %}
+        <div class="form-row">
+          <label class="form-label" for="set-alist-url">AList 服务地址</label>
+          <div><input id="set-alist-url" name="ALIST_URL" type="url" value="{{ vm.settings.alist_url }}" class="form-input" /></div>
+        </div>
+        <div class="form-row">
+          <label class="form-label" for="set-alist-user">登录用户名</label>
+          <div><input id="set-alist-user" name="ALIST_USERNAME" type="text" value="{{ vm.settings.alist_username }}" class="form-input" /></div>
+        </div>
+        <div class="form-row">
+          <label class="form-label" for="set-alist-pwd">登录密码</label>
+          <div><input id="set-alist-pwd" name="ALIST_PASSWORD" type="password" value="{{ vm.settings.alist_password }}" class="form-input" /></div>
+        </div>
+
+        {% elif g.id == 'tmdb' %}
+        <div class="form-row">
+          <label class="form-label" for="set-tmdb-token">只读访问令牌</label>
+          <div><input id="set-tmdb-token" name="TMDB_TOKEN" type="password" value="{{ vm.settings.tmdb_token }}" class="form-input font-mono text-xs" /></div>
+        </div>
+
+        {% elif g.id == 'mdblist' %}
+        <div class="form-row">
+          <label class="form-label" for="set-mdblist-key">MDBList API Key</label>
+          <div class="space-y-1">
+            <input id="set-mdblist-key" name="MDBLIST_APIKEY" type="password" value="{{ vm.settings.mdblist_apikey }}" placeholder="选填，补填后可获取 IMDb / 烂番茄评分" class="form-input font-mono text-xs" />
+            {% if g.degrade_hint %}<p class="text-xs" style="color: var(--text-muted);">{{ g.degrade_hint }}</p>{% endif %}
+          </div>
+        </div>
+
+        {% elif g.id == 'deepseek' %}
+        <div class="form-row">
+          <label class="form-label" for="set-llm-base">接口地址 (Base URL)</label>
+          <div><input id="set-llm-base" name="LLM_BASE_URL" type="url" value="{{ vm.settings.llm_base_url }}" class="form-input" /></div>
+        </div>
+        <div class="form-row">
+          <label class="form-label" for="set-llm-key">API 密钥 (API Key)</label>
+          <div class="space-y-1">
+            <input id="set-llm-key" name="LLM_API_KEY" type="password" value="{{ vm.settings.llm_api_key }}" placeholder="选填，补填有效密钥后自动启用 AI 名称还原" class="form-input font-mono text-xs" />
+            {% if g.degrade_hint %}<p class="text-xs" style="color: var(--text-muted);">{{ g.degrade_hint }}</p>{% endif %}
+          </div>
+        </div>
+        <div class="form-row">
+          <label class="form-label" for="set-llm-model">模型名称</label>
+          <div><input id="set-llm-model" name="LLM_MODEL" type="text" value="{{ vm.settings.llm_model }}" class="form-input" /></div>
+        </div>
+        <div class="form-row">
+          <label class="form-label" for="set-llm-api">调用协议 (LLM_API)</label>
+          <div>
+            <select id="set-llm-api" name="LLM_API" class="form-select">
+              <option value="chat_completions" {% if vm.settings.llm_api == 'chat_completions' %}selected{% endif %}>chat_completions（标准 /chat/completions）</option>
+              <option value="responses" {% if vm.settings.llm_api == 'responses' %}selected{% endif %}>responses（OpenAI Responses 协议 /responses）</option>
+            </select>
+          </div>
+        </div>
+
+        {% elif g.id == 'player' %}
+        <div class="form-row">
+          <label class="form-label" for="set-player-path">播放器程序路径</label>
+          <div><input id="set-player-path" name="PLAYER_PATH" type="text" value="{{ vm.settings.player_path }}" class="form-input font-mono text-xs" /></div>
+        </div>
+        {% endif %}
+      </div>
+
+      <div
+        data-check-feedback="{{ g.id }}"
+        class="rounded-xl px-4 py-2.5 text-xs {% if not st.message %}hidden{% endif %}"
+        style="background-color: var(--bg-subtle); color: var(--text-secondary);"
+      >
+        {{ st.message }}
+      </div>
+    </section>
+    {% endfor %}
+  </form>
+</div>
+{% endblock %}

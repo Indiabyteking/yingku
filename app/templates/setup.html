@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% set hide_main_nav = not vm.onboarding_completed %}
+
+{% block content %}
+<div class="page-container py-10">
+  <div class="max-w-3xl mx-auto space-y-6" id="setup-wizard-root">
+    <div class="space-y-2">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium" style="background-color: var(--bg-subtle); color: var(--text-secondary);">
+        <span>首次使用引导</span>
+        <span>·</span>
+        <span>共 5 步</span>
+      </div>
+      <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">连接本机服务与影视资料源</h1>
+      <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+        配置将安全写入项目根目录的 <code class="px-1.5 py-0.5 rounded text-xs" style="background: var(--bg-subtle);">.env</code> 文件并立即生效。
+        其中 <strong>AList</strong> 与 <strong>TMDB</strong> 为必需项；<strong>MDBList</strong> 与 <strong>DeepSeek</strong> 可点击跳过，后续随时可在“设置”页补填。
+      </p>
+    </div>
+
+    <!-- 步骤进度条 -->
+    <div class="grid grid-cols-5 gap-2" role="tablist" aria-label="引导步骤">
+      {% for g in vm.guides %}
+      {% set st = vm.statuses[g.id] %}
+      <button
+        type="button"
+        data-wizard-tab="{{ loop.index }}"
+        class="wizard-tab text-left p-2.5 sm:p-3 rounded-xl border transition cursor-pointer {% if loop.first %}is-current{% endif %}"
+        style="background-color: var(--bg-surface); border-color: var(--border-subtle);"
+      >
+        <div class="flex items-center justify-between gap-1 text-xs mb-1">
+          <span class="font-semibold">步骤 {{ g.step }}</span>
+          <span class="w-2 h-2 rounded-full" data-step-dot="{{ g.id }}"
+            style="background-color: {% if st.state == 'ok' %}var(--status-ok-fg){% elif st.state == 'error' %}var(--status-err-fg){% elif st.state == 'skipped' %}var(--status-warn-fg){% else %}var(--text-muted){% endif %};"></span>
+        </div>
+        <div class="text-xs font-medium truncate">{{ g.title.split(' ')[0] }}</div>
+      </button>
+      {% endfor %}
+    </div>
+
+    <form id="setup-config-form" class="space-y-6" onsubmit="return false;">
+      {% for g in vm.guides %}
+      {% set st = vm.statuses[g.id] %}
+      <section
+        data-wizard-panel="{{ loop.index }}"
+        data-service-id="{{ g.id }}"
+        class="surface-card p-6 sm:p-8 space-y-5 {% if not loop.first %}hidden{% endif %}"
+      >
+        <div class="flex flex-wrap items-start justify-between gap-3 pb-4 border-b" style="border-color: var(--border-subtle);">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full" style="background-color: var(--bg-subtle); color: var(--text-secondary);">
+                第 {{ g.step }} / 5 步 · {{ g.badge }}
+              </span>
+              <span class="status-pill" data-status-badge="{{ g.id }}" data-state="{{ st.state }}">{{ st.label }}</span>
+            </div>
+            <h2 class="text-xl font-bold pt-1">{{ g.title }}</h2>
+          </div>
+          <a
+            href="{{ g.guide_url }}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-secondary !py-1.5 !px-3 text-xs"
+          >
+            <span>{{ g.guide_label }}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M7 17L17 7M9 7h8v8"></path>
+            </svg>
+          </a>
+        </div>
+
+        <div class="text-sm leading-relaxed space-y-1.5" style="color: var(--text-secondary);">
+          <p><strong>用途说明：</strong>{{ g.purpose }}</p>
+          {% if g.degrade_hint %}
+          <p class="text-xs" style="color: var(--text-muted);">提示：{{ g.degrade_hint }}</p>
+          {% endif %}
+        </div>
+
+        <!-- 各步骤左标签、右对齐控件区域 -->
+        <div class="divide-y" style="border-color: var(--border-subtle);">
+          {% if g.id == 'alist' %}
+          <div class="form-row">
+            <label class="form-label" for="setup-alist-url">AList 服务地址</label>
+            <div class="space-y-1">
+              <input id="setup-alist-url" name="ALIST_URL" type="url" value="{{ vm.settings.alist_url }}" placeholder="http://127.0.0.1:5244" class="form-input" />
+              <p class="text-xs" style="color: var(--text-muted);">本机默认地址通常为 http://127.0.0.1:5244</p>
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="setup-alist-user">登录用户名</label>
+            <div>
+              <input id="setup-alist-user" name="ALIST_USERNAME" type="text" value="{{ vm.settings.alist_username }}" placeholder="admin" class="form-input" />
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="setup-alist-pwd">登录密码</label>
+            <div class="space-y-1">
+              <input id="setup-alist-pwd" name="ALIST_PASSWORD" type="password" value="{{ vm.settings.alist_password }}" placeholder="请输入 AList 管理密码" class="form-input" />
+              {% if vm.placeholder_flags.alist_password %}
+              <p class="text-xs" style="color: var(--status-warn-fg);">检测到当前密码为占位值，请修改为实际密码。</p>
+              {% endif %}
+            </div>
+          </div>
+
+          {% elif g.id == 'tmdb' %}
+          <div class="form-row">
+            <label class="form-label" for="setup-tmdb-token">只读访问令牌</label>
+            <div class="space-y-1">
+              <input id="setup-tmdb-token" name="TMDB_TOKEN" type="password" value="{{ vm.settings.tmdb_token }}" placeholder="eyJhbGciOiJIUzI1NiJ9..." class="form-input font-mono text-xs" />
+              <p class="text-xs" style="color: var(--text-muted);">请填写 TMDB API Read Access Token（Bearer Token），而非短 API Key。</p>
+            </div>
+          </div>
+
+          {% elif g.id == 'mdblist' %}
+          <div class="form-row">
+            <label class="form-label" for="setup-mdblist-key">MDBList API Key</label>
+            <div class="space-y-1">
+              <input id="setup-mdblist-key" name="MDBLIST_APIKEY" type="password" value="{{ vm.settings.mdblist_apikey }}" placeholder="选填，留空或跳过则仅展示 TMDB 评分" class="form-input font-mono text-xs" />
+              {% if vm.placeholder_flags.mdblist_apikey %}
+              <p class="text-xs" style="color: var(--status-warn-fg);">当前值为占位符（{{ vm.settings.mdblist_apikey }}），可点检测查看原因或直接跳过。</p>
+              {% endif %}
+            </div>
+          </div>
+
+          {% elif g.id == 'deepseek' %}
+          <div class="form-row">
+            <label class="form-label" for="setup-llm-base">接口地址 (Base URL)</label>
+            <div>
+              <input id="setup-llm-base" name="LLM_BASE_URL" type="url" value="{{ vm.settings.llm_base_url }}" placeholder="https://api.deepseek.com" class="form-input" />
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="setup-llm-key">API 密钥 (API Key)</label>
+            <div class="space-y-1">
+              <input id="setup-llm-key" name="LLM_API_KEY" type="password" value="{{ vm.settings.llm_api_key }}" placeholder="sk-...（选填，可跳过）" class="form-input font-mono text-xs" />
+              {% if vm.placeholder_flags.llm_api_key %}
+              <p class="text-xs" style="color: var(--status-warn-fg);">检测到 .env 中当前为占位值「{{ vm.settings.llm_api_key }}」；若暂不配置，可点击“检测”验证提示后直接点“跳过此步”。</p>
+              {% endif %}
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="setup-llm-model">模型名称</label>
+            <div>
+              <input id="setup-llm-model" name="LLM_MODEL" type="text" value="{{ vm.settings.llm_model }}" placeholder="deepseek-chat" class="form-input" />
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="setup-llm-api">调用协议 (LLM_API)</label>
+            <div>
+              <select id="setup-llm-api" name="LLM_API" class="form-select">
+                <option value="chat_completions" {% if vm.settings.llm_api == 'chat_completions' %}selected{% endif %}>chat_completions（标准 /chat/completions）</option>
+                <option value="responses" {% if vm.settings.llm_api == 'responses' %}selected{% endif %}>responses（OpenAI Responses 协议 /responses）</option>
+              </select>
+            </div>
+          </div>
+
+          {% elif g.id == 'player' %}
+          <div class="form-row">
+            <label class="form-label" for="setup-player-path">播放器程序路径</label>
+            <div class="space-y-1">
+              <input id="setup-player-path" name="PLAYER_PATH" type="text" value="{{ vm.settings.player_path }}" placeholder="例如 C:\Program Files\MPC-HC\mpc-hc64.exe" class="form-input font-mono text-xs" />
+              <p class="text-xs" style="color: var(--text-muted);">支持本机安装的 MPC-HC 或其他兼容命令行拉起直链的本地播放器可执行文件。</p>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- 实时检测结果反馈框 -->
+        <div
+          data-check-feedback="{{ g.id }}"
+          class="rounded-xl px-4 py-3 text-xs leading-relaxed {% if not st.message %}hidden{% endif %}"
+          style="background-color: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border-subtle);"
+        >
+          {{ st.message }}
+        </div>
+
+        <!-- 底部步骤操作栏 -->
+        <div class="pt-3 flex flex-wrap items-center justify-between gap-3 border-t" style="border-color: var(--border-subtle);">
+          <div class="flex items-center gap-2.5">
+            {% if not loop.first %}
+            <button type="button" data-wizard-prev="{{ loop.index }}" class="btn-secondary">上一步</button>
+            {% endif %}
+            <button type="button" data-check-service="{{ g.id }}" class="btn-secondary">
+              <span>检测</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2.5">
+            {% if not g.required and g.id in ('mdblist', 'deepseek') %}
+            <button type="button" data-skip-service="{{ g.id }}" data-next-step="{{ loop.index + 1 }}" class="btn-ghost">
+              跳过此步（降级运行）
+            </button>
+            {% endif %}
+
+            {% if not loop.last %}
+            <button type="button" data-wizard-next="{{ loop.index }}" class="btn-primary">下一步</button>
+            {% else %}
+            <button type="button" id="btn-finish-setup" class="btn-primary">完成引导并进入影库</button>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+      {% endfor %}
+    </form>
+  </div>
+</div>
+{% endblock %}

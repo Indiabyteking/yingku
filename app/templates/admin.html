@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-container py-8 space-y-6" id="admin-page-root">
+  <!-- 顶部标题与统计指标 -->
+  <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div class="space-y-1">
+      <h1 class="text-2xl font-bold tracking-tight">后台媒体库管理</h1>
+      <p class="text-sm" style="color: var(--text-secondary);">
+        管理已入库作品的显示标题、候选片名 Logo / 海报 / 背景图、重新匹配 TMDB 条目，以及调整剧集文件与季集的对应关系。
+      </p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2.5">
+      <a href="/import" class="btn-primary !py-2 !px-4 text-xs">+ 添加新影视</a>
+      <a href="/settings" class="btn-secondary !py-2 !px-4 text-xs">外部服务设置</a>
+    </div>
+  </div>
+
+  <!-- 统计概览条 -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div class="surface-card p-4">
+      <div class="text-xs" style="color: var(--text-muted);">已入库总作品</div>
+      <div class="text-2xl font-bold mt-1">{{ vm.stats.total }}</div>
+    </div>
+    <div class="surface-card p-4">
+      <div class="text-xs" style="color: var(--text-muted);">电影数量</div>
+      <div class="text-2xl font-bold mt-1">{{ vm.stats.movies }}</div>
+    </div>
+    <div class="surface-card p-4">
+      <div class="text-xs" style="color: var(--text-muted);">剧集数量</div>
+      <div class="text-2xl font-bold mt-1">{{ vm.stats.tv }}</div>
+    </div>
+    <div class="surface-card p-4">
+      <div class="text-xs" style="color: var(--text-muted);">待手动对应季集文件</div>
+      <div class="text-2xl font-bold mt-1">{{ vm.stats.unmatched_files }}</div>
+    </div>
+  </div>
+
+  <!-- 搜索与筛选条 -->
+  <form action="/admin" method="get" class="surface-card p-4 flex flex-wrap items-center gap-2.5">
+    <input
+      type="search"
+      name="q"
+      value="{{ vm.filters.q }}"
+      placeholder="搜索已入库的电影或剧集..."
+      class="form-input !py-1.5 flex-1 min-w-[180px] text-xs sm:text-sm"
+    />
+    <select name="type" aria-label="类型筛选" class="form-select !w-auto !py-1.5 text-xs sm:text-sm">
+      <option value="">全部形态</option>
+      <option value="movie" {% if vm.filters.media_type == 'movie' %}selected{% endif %}>电影</option>
+      <option value="tv" {% if vm.filters.media_type == 'tv' %}selected{% endif %}>剧集</option>
+    </select>
+    <select name="sort" aria-label="排序方式" class="form-select !w-auto !py-1.5 text-xs sm:text-sm">
+      <option value="recent" {% if vm.filters.sort == 'recent' %}selected{% endif %}>按最近入库</option>
+      <option value="rating" {% if vm.filters.sort == 'rating' %}selected{% endif %}>按评分高低</option>
+      <option value="year" {% if vm.filters.sort == 'year' %}selected{% endif %}>按发行年份</option>
+      <option value="title" {% if vm.filters.sort == 'title' %}selected{% endif %}>按标题排序</option>
+    </select>
+    <button type="submit" class="btn-primary !py-1.5 !px-4 text-xs sm:text-sm">筛选</button>
+    {% if vm.filters.q or vm.filters.media_type %}
+    <a href="/admin" class="btn-ghost text-xs">重置</a>
+    {% endif %}
+  </form>
+
+  {% if not vm.works %}
+  <div class="surface-card p-12 text-center space-y-3">
+    <h2 class="text-lg font-bold">当前没有可管理的影视作品</h2>
+    <p class="text-xs" style="color: var(--text-secondary);">请先从 AList 网盘目录中选择电影或剧集完成入库。</p>
+    <div class="pt-1">
+      <a href="/import" class="btn-primary text-xs">前往添加影视</a>
+    </div>
+  </div>
+  {% else %}
+
+  <!-- 双栏后台工作台：左栏作品列表，右栏当前选中作品管理面板 -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    <!-- 左栏：已入库作品清单 -->
+    <aside class="lg:col-span-4 surface-card overflow-hidden divide-y" style="border-color: var(--border-subtle);">
+      {% for item in vm.works %}
+      {% set is_selected = active_detail and active_detail.work.id == item.id %}
+      <div
+        class="p-3.5 flex items-center justify-between gap-3 transition"
+        style="{% if is_selected %}background-color: var(--bg-subtle-hover);{% endif %}"
+      >
+        <a
+          href="/admin?work_id={{ item.id }}{% if vm.filters.q %}&q={{ vm.filters.q }}{% endif %}{% if vm.filters.media_type %}&type={{ vm.filters.media_type }}{% endif %}"
+          class="flex items-center gap-3 min-w-0 flex-1 no-underline"
+          style="color: inherit;"
+        >
+          <div class="w-11 h-16 rounded-lg overflow-hidden shrink-0" style="background: var(--bg-elevated);">
+            {% if item.poster_path %}
+            <img src="{{ media_img_url(item.poster_path) }}" alt="{{ item.display_title }}" class="w-full h-full object-cover" />
+            {% endif %}
+          </div>
+          <div class="min-w-0 space-y-1">
+            <div class="text-sm font-bold truncate">{{ item.display_title }}</div>
+            <div class="flex flex-wrap items-center gap-1.5 text-xs" style="color: var(--text-muted);">
+              <span>{{ item.media_type_label }}</span>
+              {% if item.year %}<span>· {{ item.year }}</span>{% endif %}
+              <span>· {{ item.file_count }} 个文件</span>
+              {% if item.unmatched_file_count and item.unmatched_file_count > 0 %}
+              <span class="status-pill !py-0 !px-1.5 !text-[10px]" data-state="pending">待对应 {{ item.unmatched_file_count }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </a>
+        <button
+          type="button"
+          data-admin-delete-work="{{ item.id }}"
+          data-work-title="{{ item.display_title }}"
+          class="btn-ghost !px-2 !py-1 text-xs shrink-0"
+          title="从媒体库删除此作品"
+        >
+          删除
+        </button>
+      </div>
+      {% endfor %}
+    </aside>
+
+    <!-- 右栏：当前选中作品详情编辑（左标签、右对齐控件） -->
+    {% if active_detail %}
+    {% set aw = active_detail.work %}
+    <div class="lg:col-span-8 space-y-6" id="admin-work-editor" data-work-id="{{ aw.id }}" data-media-type="{{ aw.media_type }}">
+      <!-- 分组 1：基本资料与标题管理 -->
+      <section class="surface-card p-6 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b" style="border-color: var(--border-subtle);">
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-bold">{{ aw.display_title }}</h2>
+              <span class="text-xs px-2 py-0.5 rounded-full" style="background: var(--bg-subtle); color: var(--text-secondary);">
+                {{ aw.media_type_label }} · TMDB #{{ aw.tmdb_id }}
+              </span>
+            </div>
+            <p class="text-xs mt-0.5" style="color: var(--text-muted);">TMDB 标准译名：{{ aw.title }}{% if aw.original_title %}（{{ aw.original_title }}）{% endif %}</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <a href="{{ aw.detail_url }}" class="btn-secondary !py-1.5 !px-3 text-xs">查看前台页 ↗</a>
+            <button type="button" id="btn-admin-refresh-work" data-work-id="{{ aw.id }}" class="btn-secondary !py-1.5 !px-3 text-xs">
+              重新获取资料与评分
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div class="form-row">
+            <label class="form-label" for="admin-custom-title">自定义显示标题</label>
+            <div class="space-y-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <input
+                  id="admin-custom-title"
+                  type="text"
+                  value="{{ aw.custom_title }}"
+                  placeholder="留空则默认显示 TMDB 中文标题「{{ aw.title }}」"
+                  class="form-input flex-1 min-w-[200px]"
+                />
+                <button type="button" id="btn-admin-save-title" data-work-id="{{ aw.id }}" class="btn-primary !py-2 !px-4 text-xs">
+                  保存标题
+                </button>
+              </div>
+              <p class="text-xs" style="color: var(--text-muted);">修改后首页、搜索结果及详情页均立即展示新标题。</p>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <span class="form-label">片名 Logo / 海报 / 背景</span>
+            <div class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <!-- 当前 Logo -->
+                <div class="p-3 rounded-xl border space-y-2" style="border-color: var(--border-subtle); background: var(--bg-subtle);">
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="font-semibold">片名 Logo</span>
+                    <button type="button" data-open-image-picker="logos" class="underline cursor-pointer bg-transparent border-0 p-0 text-xs" style="color: var(--text-primary);">更换</button>
+                  </div>
+                  <div class="logo-preview-well h-20 flex items-center justify-center p-2">
+                    {% if aw.logo_path %}
+                    <img id="preview-current-logo" src="{{ media_img_url(aw.logo_path) }}" alt="当前 Logo" class="max-h-14 max-w-full object-contain" />
+                    {% else %}
+                    <span id="preview-current-logo-empty" class="text-xs text-white/55">当前无 Logo（显示文字标题）</span>
+                    {% endif %}
+                  </div>
+                </div>
+
+                <!-- 当前竖版海报 -->
+                <div class="p-3 rounded-xl border space-y-2" style="border-color: var(--border-subtle); background: var(--bg-subtle);">
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="font-semibold">竖版海报</span>
+                    <button type="button" data-open-image-picker="posters" class="underline cursor-pointer bg-transparent border-0 p-0 text-xs" style="color: var(--text-primary);">更换</button>
+                  </div>
+                  <div class="h-20 rounded-lg overflow-hidden flex items-center justify-center" style="background: var(--bg-elevated);">
+                    {% if aw.poster_path %}
+                    <img id="preview-current-poster" src="{{ media_img_url(aw.poster_path) }}" alt="当前海报" class="h-full w-auto object-contain" />
+                    {% else %}
+                    <span class="text-xs" style="color: var(--text-muted);">暂无海报</span>
+                    {% endif %}
+                  </div>
+                </div>
+
+                <!-- 当前横版背景图 -->
+                <div class="p-3 rounded-xl border space-y-2" style="border-color: var(--border-subtle); background: var(--bg-subtle);">
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="font-semibold">横版背景图</span>
+                    <button type="button" data-open-image-picker="backdrops" class="underline cursor-pointer bg-transparent border-0 p-0 text-xs" style="color: var(--text-primary);">更换</button>
+                  </div>
+                  <div class="h-20 rounded-lg overflow-hidden flex items-center justify-center" style="background: var(--bg-elevated);">
+                    {% if aw.backdrop_path %}
+                    <img id="preview-current-backdrop" src="{{ media_img_url(aw.backdrop_path) }}" alt="当前背景图" class="w-full h-full object-cover" />
+                    {% else %}
+                    <span class="text-xs" style="color: var(--text-muted);">暂无背景图</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <button type="button" data-open-image-picker="logos" class="btn-secondary !py-1.5 !px-3.5 text-xs">
+                  打开 TMDB 候选图片库（更换 Logo / 海报 / 背景图）
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label class="form-label" for="admin-rematch-query">重新匹配 TMDB 作品</label>
+            <div class="space-y-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <input
+                  id="admin-rematch-query"
+                  type="search"
+                  value="{{ aw.title }}"
+                  placeholder="输入新的电影或剧集名称检索 TMDB..."
+                  class="form-input flex-1 min-w-[180px]"
+                />
+                <select id="admin-rematch-type" class="form-select !w-auto">
+                  <option value="{{ aw.media_type }}">当前形态（{{ aw.media_type_label }}）</option>
+                  <option value="movie">电影</option>
+                  <option value="tv">剧集</option>
+                </select>
+                <button type="button" id="btn-admin-rematch-search" class="btn-secondary !py-2 !px-4 text-xs">检索候选</button>
+              </div>
+              <div id="admin-rematch-results" class="space-y-2 hidden"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 分组 2：关联的网盘文件与季集映射 / 多版本管理 -->
+      <section class="surface-card p-6 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b" style="border-color: var(--border-subtle);">
+          <div>
+            <h3 class="text-base font-bold">
+              {% if aw.media_type == 'tv' %}文件与季集对应关系（共 {{ active_detail.files|length }} 个文件）{% else %}电影多版本片源文件管理（共 {{ active_detail.files|length }} 个文件）{% endif %}
+            </h3>
+            <p class="text-xs mt-0.5" style="color: var(--text-secondary);">
+              {% if aw.media_type == 'tv' %}可手动修改任一网盘视频文件对应的季号与集号，保存后自动绑定对应单集剧照与进度。{% else %}可修改各片源文件的画质版本名称（如 1080p / 4K HDR），也可关联额外网盘版本文件。{% endif %}
+            </p>
+          </div>
+          <button type="button" id="btn-open-attach-file" class="btn-secondary !py-1.5 !px-3 text-xs">
+            + 关联额外网盘文件
+          </button>
+        </div>
+
+        <div class="space-y-2.5" id="admin-files-list">
+          {% for mf in active_detail.files %}
+          <div class="p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3" style="border-color: var(--border-subtle); background: var(--bg-subtle);">
+            <div class="min-w-0 flex-1 space-y-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-semibold truncate" title="{{ mf.filename }}">{{ mf.filename }}</span>
+                <span class="text-[11px]" style="color: var(--text-muted);">{{ mf.size_human }}</span>
+                {% if aw.media_type == 'tv' %}
+                <span class="status-pill !py-0.5 !px-2 !text-[11px]" data-state="{{ 'ok' if mf.match_status != 'unmatched' else 'error' }}">
+                  {% if mf.match_status != 'unmatched' and mf.episode_title %}
+                  已对应 S{{ '%02d'|format(mf.season_number or 1) }}E{{ '%02d'|format(mf.episode_number or 1) }} · {{ mf.episode_title }}
+                  {% else %}
+                  未对应单集
+                  {% endif %}
+                </span>
+                {% endif %}
+              </div>
+              <div class="text-[11px] font-mono truncate" style="color: var(--text-muted);" title="{{ mf.alist_path }}">{{ mf.alist_path }}</div>
+            </div>
+
+            {% if aw.media_type == 'tv' %}
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span class="text-xs" style="color: var(--text-secondary);">第</span>
+              <input
+                type="number"
+                min="0"
+                max="99"
+                value="{{ mf.season_number if mf.season_number is not none else 1 }}"
+                data-admin-map-season="{{ mf.id }}"
+                aria-label="季号"
+                class="form-input !w-14 !py-1 !px-2 text-xs text-center"
+              />
+              <span class="text-xs" style="color: var(--text-secondary);">季 第</span>
+              <input
+                type="number"
+                min="1"
+                max="999"
+                value="{{ mf.episode_number if mf.episode_number is not none else '' }}"
+                placeholder="集"
+                data-admin-map-episode="{{ mf.id }}"
+                aria-label="集号"
+                class="form-input !w-16 !py-1 !px-2 text-xs text-center"
+              />
+              <span class="text-xs" style="color: var(--text-secondary);">集</span>
+              <button
+                type="button"
+                data-admin-save-map="{{ mf.id }}"
+                data-work-id="{{ aw.id }}"
+                class="btn-primary !py-1 !px-3 text-xs"
+              >
+                保存
+              </button>
+              <button
+                type="button"
+                data-admin-remove-file="{{ mf.id }}"
+                data-work-id="{{ aw.id }}"
+                class="btn-ghost !py-1 !px-2 text-xs"
+                title="移除此文件关联"
+              >
+                移除
+              </button>
+            </div>
+            {% else %}
+            <div class="flex items-center gap-2 shrink-0">
+              <input
+                type="text"
+                value="{{ mf.version_label }}"
+                placeholder="如 4K HDR / 1080p"
+                data-admin-version-input="{{ mf.id }}"
+                aria-label="版本名称"
+                class="form-input !w-36 !py-1 !px-2.5 text-xs"
+              />
+              <button
+                type="button"
+                data-admin-save-version="{{ mf.id }}"
+                data-work-id="{{ aw.id }}"
+                class="btn-primary !py-1 !px-3 text-xs"
+              >
+                保存版本名
+              </button>
+              {% if active_detail.files|length > 1 %}
+              <button
+                type="button"
+                data-admin-remove-file="{{ mf.id }}"
+                data-work-id="{{ aw.id }}"
+                class="btn-ghost !py-1 !px-2 text-xs"
+              >
+                移除
+              </button>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% if active_detail %}
+<!-- 模态框：更换候选 Logo / 海报 / 背景图 -->
+<div id="modal-candidate-images" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="candidate-modal-title">
+  <div class="modal-panel !max-w-4xl p-6 space-y-4">
+    <div class="flex items-center justify-between pb-3 border-b" style="border-color: var(--border-subtle);">
+      <div>
+        <h3 id="candidate-modal-title" class="text-base font-bold">选择并更换 TMDB 候选图片</h3>
+        <p class="text-xs mt-0.5" style="color: var(--text-muted);">所有候选缩略图与选中大图均自动下载至本地缓存目录，离线亦可正常展示。</p>
+      </div>
+      <button type="button" data-close-modal="modal-candidate-images" class="btn-ghost !p-1.5" aria-label="关闭">✕</button>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <button type="button" data-cand-tab="logos" class="btn-primary !py-1 !px-3.5 text-xs">片名 Logo</button>
+        <button type="button" data-cand-tab="posters" class="btn-secondary !py-1 !px-3.5 text-xs">竖版海报</button>
+        <button type="button" data-cand-tab="backdrops" class="btn-secondary !py-1 !px-3.5 text-xs">横版背景图</button>
+      </div>
+      <button type="button" id="btn-clear-logo" class="btn-ghost text-xs">清除 Logo（改用纯文字标题）</button>
+    </div>
+
+    <div id="candidate-images-grid" class="min-h-[220px] max-h-[58vh] overflow-y-auto p-1">
+      <div class="p-10 text-center text-xs" style="color: var(--text-muted);">正在从 TMDB 获取候选图片并缓存预览图...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 模态框：关联额外 AList 网盘视频文件（支持电影多版本或补充剧集单集） -->
+<div id="modal-attach-file" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="attach-modal-title">
+  <div class="modal-panel p-6 space-y-4">
+    <div class="flex items-center justify-between pb-3 border-b" style="border-color: var(--border-subtle);">
+      <h3 id="attach-modal-title" class="text-base font-bold">从 AList 网盘关联额外视频文件</h3>
+      <button type="button" data-close-modal="modal-attach-file" class="btn-ghost !p-1.5" aria-label="关闭">✕</button>
+    </div>
+
+    <div class="space-y-3">
+      <div id="attach-alist-breadcrumbs" class="flex flex-wrap items-center gap-1 text-xs"></div>
+      <div id="attach-alist-list" class="divide-y max-h-56 overflow-y-auto rounded-xl border" style="border-color: var(--border-subtle);"></div>
+
+      <div class="form-row !py-2">
+        <label class="form-label" for="attach-file-path">选中的文件路径</label>
+        <div><input id="attach-file-path" type="text" placeholder="点击上方列表中的视频文件自动填入，也可手动输入 /baidu/..." class="form-input text-xs font-mono" /></div>
+      </div>
+
+      {% if active_detail.work.media_type == 'movie' %}
+      <div class="form-row !py-2">
+        <label class="form-label" for="attach-version-label">版本标签</label>
+        <div><input id="attach-version-label" type="text" value="4K HDR" placeholder="例如：4K HDR / 1080p 蓝光原盘" class="form-input text-xs" /></div>
+      </div>
+      {% else %}
+      <div class="form-row !py-2">
+        <span class="form-label">对应季集</span>
+        <div class="flex items-center gap-2">
+          <span class="text-xs">第</span>
+          <input id="attach-season-no" type="number" value="1" min="0" max="99" class="form-input !w-20 text-xs text-center" />
+          <span class="text-xs">季 第</span>
+          <input id="attach-episode-no" type="number" value="1" min="1" max="999" class="form-input !w-20 text-xs text-center" />
+          <span class="text-xs">集</span>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="pt-2 flex justify-end gap-2">
+        <button type="button" data-close-modal="modal-attach-file" class="btn-secondary text-xs">取消</button>
+        <button type="button" id="btn-confirm-attach-file" data-work-id="{{ active_detail.work.id }}" class="btn-primary text-xs">确认关联此文件</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

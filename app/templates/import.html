@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-container py-8 space-y-7" id="import-page-root">
+  <!-- 页面标题 -->
+  <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+    <div class="space-y-1">
+      <h1 class="text-2xl font-bold tracking-tight">添加影视与智能名称识别</h1>
+      <p class="text-sm" style="color: var(--text-secondary);">
+        浏览本机 AList 挂载的夸克或百度网盘目录，自动清洗广告后缀、还原谐音/拼音防和谐片名并匹配 TMDB 资料，也可手动搜索指定作品。
+      </p>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <span class="status-pill" data-state="{{ 'ok' if presets.llm_enabled else 'skipped' }}">
+        {% if presets.llm_enabled %}AI 辅助识别已启用{% else %}规则 + 声韵还原引擎（AI 未启用）{% endif %}
+      </span>
+      <span class="status-pill" data-state="{{ 'ok' if presets.mdblist_enabled else 'skipped' }}">
+        {% if presets.mdblist_enabled %}MDBList 多平台评分已启用{% else %}仅 TMDB 评分{% endif %}
+      </span>
+    </div>
+  </div>
+
+  <!-- 后台扫描 / 入库任务实时进度条 -->
+  <section id="import-task-banner" class="surface-card p-5 space-y-3 hidden">
+    <div class="flex items-center justify-between gap-3 text-sm">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <span id="import-task-spinner" class="inline-block w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin shrink-0"></span>
+        <span id="import-task-summary" class="font-semibold truncate">正在处理任务...</span>
+      </div>
+      <span id="import-task-percent" class="text-xs font-mono shrink-0" style="color: var(--text-secondary);">0%</span>
+    </div>
+    <div class="progress-track-surface">
+      <div id="import-task-bar" class="progress-fill" style="width: 0%;"></div>
+    </div>
+    <div id="import-task-actions" class="hidden pt-1 flex flex-wrap items-center gap-2.5">
+      <a href="/" class="btn-primary !py-1.5 !px-4 text-xs">前往首页浏览</a>
+      <a href="/admin" class="btn-secondary !py-1.5 !px-4 text-xs">打开后台管理</a>
+    </div>
+  </section>
+
+  <!-- 主工作区：左侧浏览网盘选择文件，右侧网盘防和谐改写还原演示台 -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    <!-- 1. AList 目录浏览器 -->
+    <section class="lg:col-span-7 surface-card p-5 sm:p-6 space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b" style="border-color: var(--border-subtle);">
+        <div class="space-y-0.5">
+          <h2 class="text-base font-bold">1. 浏览 AList 网盘目录</h2>
+          <p class="text-xs" style="color: var(--text-muted);">点击文件夹进入下级目录，勾选电影文件或剧集目录后点击“识别所选内容”。</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" id="btn-alist-refresh" class="btn-ghost text-xs">刷新目录</button>
+          <button type="button" id="btn-alist-select-videos" class="btn-secondary !py-1.5 !px-3 text-xs">全选当前项</button>
+        </div>
+      </div>
+
+      <!-- 面包屑路径导航 -->
+      <nav id="alist-breadcrumbs" aria-label="网盘路径" class="flex flex-wrap items-center gap-1 text-xs py-1"></nav>
+
+      <!-- 目录内容列表 -->
+      <div id="alist-entry-list" class="divide-y max-h-[380px] overflow-y-auto rounded-xl border" style="border-color: var(--border-subtle);">
+        <div class="p-8 text-center text-xs" style="color: var(--text-muted);">正在加载 AList 挂载目录...</div>
+      </div>
+
+      <!-- 底部扫描操作栏 -->
+      <div class="pt-2 flex flex-wrap items-center justify-between gap-3">
+        <span id="alist-selected-count" class="text-xs" style="color: var(--text-secondary);">已勾选 0 个文件或文件夹</span>
+        <button type="button" id="btn-start-scan" class="btn-primary" disabled>
+          <span>识别所选网盘内容</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 2. 网盘改写片名还原测试与解析链路展示 -->
+    <section class="lg:col-span-5 surface-card p-5 sm:p-6 space-y-4">
+      <div class="space-y-1 pb-3 border-b" style="border-color: var(--border-subtle);">
+        <h2 class="text-base font-bold">防和谐改写文件名还原验证台</h2>
+        <p class="text-xs leading-relaxed" style="color: var(--text-secondary);">
+          针对夸克、百度网盘常见的谐音字、夹杂拼音、插入分隔符、首字母缩写与繁简混用文件名，实时演示「原始文件名 → 清洗后名称 → 推测片名 → TMDB 校验结果」完整链路。
+        </p>
+      </div>
+
+      <!-- 预设典型案例一键填入 -->
+      <div class="space-y-1.5">
+        <div class="text-xs font-medium" style="color: var(--text-muted);">点击填入典型防和谐改写示例：</div>
+        <div class="flex flex-wrap gap-1.5">
+          {% for sp in presets.samples %}
+          <button
+            type="button"
+            data-sample-filename="{{ sp.filename }}"
+            data-sample-parent="{{ sp.parent_path }}"
+            class="btn-secondary !py-1 !px-2.5 text-xs"
+          >
+            {{ sp.label }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <div class="space-y-1">
+          <label for="sample-filename-input" class="text-xs font-medium" style="color: var(--text-secondary);">网盘文件名</label>
+          <input
+            id="sample-filename-input"
+            type="text"
+            value="{{ presets.samples[0].filename if presets.samples else '' }}"
+            placeholder="例如：【先转存防和谐】周·chu·除·三·hai.2023.2160p.mp4"
+            class="form-input text-xs font-mono"
+          />
+        </div>
+        <div class="space-y-1">
+          <label for="sample-parent-input" class="text-xs font-medium" style="color: var(--text-secondary);">所在网盘目录路径</label>
+          <input
+            id="sample-parent-input"
+            type="text"
+            value="{{ presets.samples[0].parent_path if presets.samples else '/' }}"
+            placeholder="例如：/资源/来自：分享/兄弟连"
+            class="form-input text-xs font-mono"
+          />
+        </div>
+        <button type="button" id="btn-run-sample-recognize" class="btn-primary w-full">
+          立即还原片名并检索 TMDB 校验
+        </button>
+      </div>
+
+      <!-- 四步识别链路实时展示卡 -->
+      <div id="sample-result-card" class="rounded-xl p-4 space-y-3 hidden" style="background-color: var(--bg-subtle); border: 1px solid var(--border-subtle);"></div>
+    </section>
+  </div>
+
+  <!-- 3. 识别结果分桶核对与批量确认入库区 -->
+  <section id="scan-results-section" class="surface-card p-5 sm:p-6 space-y-5 hidden">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b" style="border-color: var(--border-subtle);">
+      <div class="space-y-1">
+        <h2 class="text-lg font-bold">2. 核对识别结果并确认入库</h2>
+        <p class="text-xs" style="color: var(--text-secondary);">
+          系统已将文件分为「可确认 / 待核对 / 未识别」。可批量勾选入库，也可点击任意条目的“手动指定 TMDB”检索替换目标作品。
+        </p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" id="btn-select-confirmable" class="btn-secondary !py-1.5 !px-3 text-xs">全选可确认项</button>
+        <button type="button" id="btn-select-all-matched" class="btn-secondary !py-1.5 !px-3 text-xs">全选已匹配项</button>
+        <button type="button" id="btn-confirm-import" class="btn-primary !py-1.5 !px-4 text-xs">
+          确认入库所选条目
+        </button>
+      </div>
+    </div>
+
+    <!-- 分桶筛选标签 -->
+    <div class="flex flex-wrap items-center gap-2" role="tablist" aria-label="识别置信度分桶">
+      <button type="button" data-bucket-tab="all" class="btn-primary !py-1 !px-3.5 text-xs">
+        全部 (<span data-bucket-count="all">0</span>)
+      </button>
+      <button type="button" data-bucket-tab="confirmable" class="btn-secondary !py-1 !px-3.5 text-xs">
+        可确认 (<span data-bucket-count="confirmable">0</span>)
+      </button>
+      <button type="button" data-bucket-tab="needs_review" class="btn-secondary !py-1 !px-3.5 text-xs">
+        待核对 (<span data-bucket-count="needs_review">0</span>)
+      </button>
+      <button type="button" data-bucket-tab="unrecognized" class="btn-secondary !py-1 !px-3.5 text-xs">
+        未识别 (<span data-bucket-count="unrecognized">0</span>)
+      </button>
+    </div>
+
+    <!-- 识别条目列表 -->
+    <div id="recognized-items-list" class="space-y-3"></div>
+  </section>
+</div>
+
+<!-- 模态框 A：查看单文件四步识别详情与判断理由 -->
+<div id="modal-recognition-trace" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="trace-modal-title">
+  <div class="modal-panel p-6 space-y-4">
+    <div class="flex items-center justify-between pb-3 border-b" style="border-color: var(--border-subtle);">
+      <h3 id="trace-modal-title" class="text-base font-bold">名称识别链路与判断理由</h3>
+      <button type="button" data-close-modal="modal-recognition-trace" class="btn-ghost !p-1.5" aria-label="关闭">✕</button>
+    </div>
+    <div id="trace-modal-body" class="space-y-4 text-sm"></div>
+  </div>
+</div>
+
+<!-- 模态框 B：手动搜索 TMDB 并指定作品 -->
+<div id="modal-tmdb-picker" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="tmdb-picker-title">
+  <div class="modal-panel p-6 space-y-4">
+    <div class="flex items-center justify-between pb-3 border-b" style="border-color: var(--border-subtle);">
+      <div>
+        <h3 id="tmdb-picker-title" class="text-base font-bold">手动搜索并指定 TMDB 作品</h3>
+        <p id="tmdb-picker-subtitle" class="text-xs mt-0.5 truncate max-w-md" style="color: var(--text-muted);"></p>
+      </div>
+      <button type="button" data-close-modal="modal-tmdb-picker" class="btn-ghost !p-1.5" aria-label="关闭">✕</button>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <input id="tmdb-manual-query" type="search" placeholder="输入电影或剧集中英文名称..." class="form-input flex-1 min-w-[180px]" />
+      <select id="tmdb-manual-type" class="form-select !w-auto">
+        <option value="">全部类型</option>
+        <option value="movie">电影</option>
+        <option value="tv">剧集</option>
+      </select>
+      <button type="button" id="btn-tmdb-manual-search" class="btn-primary">搜索 TMDB</button>
+    </div>
+
+    <label class="inline-flex items-center gap-2 text-xs cursor-pointer" style="color: var(--text-secondary);">
+      <input type="checkbox" id="tmdb-apply-same-folder" checked />
+      <span>同时应用到本次扫描中同一网盘目录下的其他未匹配/同组文件</span>
+    </label>
+
+    <div id="tmdb-manual-results" class="space-y-2.5 max-h-[380px] overflow-y-auto">
+      <div class="p-6 text-center text-xs" style="color: var(--text-muted);">输入关键词后点击“搜索 TMDB”查看候选作品</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

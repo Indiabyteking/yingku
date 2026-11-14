@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+{% set work = vm.work %}
+
+{% block content %}
+<!-- 顶部剧集沉浸式背景横幅 -->
+<section class="hero-stage !min-h-[400px] sm:!min-h-[500px] flex items-end">
+  {% if work.backdrop_path %}
+  <img src="{{ media_img_url(work.backdrop_path) }}" alt="{{ work.display_title }}" class="absolute inset-0 w-full h-full object-cover object-center" />
+  {% elif work.poster_path %}
+  <img src="{{ media_img_url(work.poster_path) }}" alt="{{ work.display_title }}" class="absolute inset-0 w-full h-full object-cover blur-md opacity-45" />
+  {% endif %}
+  <div class="hero-vignette"></div>
+
+  <div class="page-container relative z-10 py-10 sm:py-14 w-full">
+    <div class="flex flex-col md:flex-row items-start md:items-end gap-7 lg:gap-10">
+      <div class="w-36 sm:w-44 md:w-52 shrink-0 rounded-2xl overflow-hidden shadow-2xl border border-white/15 bg-black/40">
+        {% if vm.current_season and vm.current_season.poster_path %}
+        <img src="{{ media_img_url(vm.current_season.poster_path) }}" alt="{{ work.display_title }}" class="w-full aspect-[2/3] object-cover block" />
+        {% elif work.poster_path %}
+        <img src="{{ media_img_url(work.poster_path) }}" alt="{{ work.display_title }}" class="w-full aspect-[2/3] object-cover block" />
+        {% else %}
+        <div class="w-full aspect-[2/3] flex items-center justify-center p-4 text-center text-sm font-semibold text-white/80">{{ work.display_title }}</div>
+        {% endif %}
+      </div>
+
+      <div class="flex-1 min-w-0 space-y-4 text-white">
+        {% if work.logo_path %}
+        <div class="space-y-2">
+          <img
+            src="{{ media_img_url(work.logo_path) }}"
+            alt="{{ work.display_title }}"
+            class="max-h-20 sm:max-h-28 max-w-[280px] sm:max-w-[400px] w-auto object-contain drop-shadow-2xl"
+          />
+          <div class="text-sm sm:text-base font-semibold text-white/85">
+            <span>{{ work.display_title }}</span>
+            {% if work.original_title and work.original_title != work.display_title %}
+            <span class="text-white/60 font-normal"> · {{ work.original_title }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="space-y-1">
+          <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight">{{ work.display_title }}</h1>
+          {% if work.original_title and work.original_title != work.display_title %}
+          <p class="text-sm text-white/65">{{ work.original_title }}</p>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="flex flex-wrap items-center gap-2.5 text-xs sm:text-sm text-white/85">
+          <span class="px-2.5 py-0.5 rounded-full bg-white/15 font-semibold">剧集</span>
+          {% if work.year %}<span>{{ work.year }} 年首播</span>{% endif %}
+          {% if vm.seasons %}<span>· 共 {{ vm.seasons|length }} 季</span>{% endif %}
+          {% if work.genres %}<span>· {{ work.genres | join(' / ') }}</span>{% endif %}
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          {% if work.tmdb_rating and work.tmdb_rating > 0 %}
+          <div class="px-3 py-1 rounded-lg bg-white/14 backdrop-blur-md text-xs font-semibold">
+            <span class="text-white/65 mr-1">TMDB</span><span>{{ work.rating_text }}</span>
+          </div>
+          {% endif %}
+          {% for r in work.ratings %}
+          <div class="px-3 py-1 rounded-lg bg-white/14 backdrop-blur-md text-xs font-semibold">
+            <span class="text-white/65 mr-1">{{ r.label }}</span><span>{{ r.display }}</span>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if work.overview %}
+        <p class="text-sm sm:text-base text-white/85 leading-relaxed max-w-3xl">{{ work.overview }}</p>
+        {% endif %}
+
+        <div class="pt-1 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            data-play-work="{{ work.id }}"
+            class="hero-play-btn"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 4.5a1.2 1.2 0 0 1 1.82-1.03l11.5 7a1.2 1.2 0 0 1 0 2.06l-11.5 7A1.2 1.2 0 0 1 6 18.5v-14z"/>
+            </svg>
+            <span>{{ vm.resume_label }}</span>
+          </button>
+          <a href="/admin?work_id={{ work.id }}" class="hero-detail-btn">
+            <span>后台调整资料与季集</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 季选择器与本季剧集小卡片 -->
+<div class="page-container pt-8 space-y-10" id="episodes">
+  {% if vm.unmatched_files %}
+  <div class="surface-card p-5 space-y-3" style="border-color: var(--border-strong);">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h2 class="text-sm font-bold">发现 {{ vm.unmatched_files|length }} 个尚未自动对应到单集的网盘视频文件</h2>
+        <p class="text-xs mt-0.5" style="color: var(--text-secondary);">请在下方直接指定对应的季号与集号，保存后即可点击对应集卡片播放。</p>
+      </div>
+      <a href="/admin?work_id={{ work.id }}" class="btn-secondary !py-1 !px-3 text-xs">前往后台批量调整</a>
+    </div>
+    <div class="space-y-2">
+      {% for uf in vm.unmatched_files %}
+      <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl" style="background: var(--bg-subtle);" data-unmatched-row="{{ uf.id }}">
+        <div class="min-w-0 flex-1">
+          <div class="text-xs font-semibold truncate">{{ uf.filename }}</div>
+          <div class="text-[11px] truncate" style="color: var(--text-muted);">{{ uf.alist_path }} · {{ uf.size_human }}</div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <label class="text-xs" style="color: var(--text-secondary);">第</label>
+          <input type="number" min="0" max="99" value="{{ vm.active_season }}" data-bind-season="{{ uf.id }}" class="form-input !w-16 !py-1 text-xs text-center" />
+          <label class="text-xs" style="color: var(--text-secondary);">季 第</label>
+          <input type="number" min="1" max="999" placeholder="集" data-bind-episode="{{ uf.id }}" class="form-input !w-16 !py-1 text-xs text-center" />
+          <label class="text-xs" style="color: var(--text-secondary);">集</label>
+          <button type="button" data-quick-bind-file="{{ uf.id }}" data-work-id="{{ work.id }}" class="btn-primary !py-1 !px-3 text-xs">保存</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- 季切换导航 -->
+  <section class="space-y-5">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4" style="border-color: var(--border-subtle);">
+      <div class="flex items-center gap-2 overflow-x-auto pb-1">
+        {% for s in vm.seasons %}
+        <a
+          href="/tv/{{ work.id }}?season={{ s.season_number }}#episodes"
+          class="{% if s.season_number == vm.active_season %}btn-primary{% else %}btn-secondary{% endif %} !py-1.5 !px-4 text-xs sm:text-sm shrink-0"
+        >
+          <span>{{ s.name }}</span>
+          <span class="opacity-70 text-xs">({{ s.available_count }}/{{ s.episode_count }}集)</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% if vm.current_season %}
+      <div class="text-xs" style="color: var(--text-muted);">
+        当前展示：{{ vm.current_season.name }} · 已关联 {{ vm.current_season.available_count }} 个网盘文件
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- 单集剧照小卡片网格 -->
+    {% if vm.episodes %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+      {% for ep in vm.episodes %}
+      <article
+        class="surface-card overflow-hidden flex flex-col group transition"
+        data-episode-card="{{ ep.id }}"
+      >
+        <!-- 16:9 剧照区域（点卡片或剧照即可直接拉起 MPC-HC 播放该集） -->
+        <div
+          class="relative aspect-video overflow-hidden {% if ep.playable %}cursor-pointer{% endif %}"
+          style="background-color: var(--bg-elevated);"
+          {% if ep.playable %}
+          data-play-work="{{ work.id }}"
+          data-play-episode="{{ ep.id }}"
+          role="button"
+          tabindex="0"
+          aria-label="播放第 {{ ep.episode_number }} 集 {{ ep.title }}"
+          {% endif %}
+        >
+          {% if ep.still_path %}
+          <img
+            src="{{ media_img_url(ep.still_path) }}"
+            alt="第 {{ ep.episode_number }} 集 {{ ep.title }}"
+            loading="lazy"
+            class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+          />
+          {% elif work.backdrop_path %}
+          <img
+            src="{{ media_img_url(work.backdrop_path) }}"
+            alt="{{ ep.title }}"
+            loading="lazy"
+            class="w-full h-full object-cover opacity-75"
+          />
+          {% else %}
+          <div class="w-full h-full flex items-center justify-center text-xs" style="color: var(--text-muted);">暂无单集剧照</div>
+          {% endif %}
+
+          <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent"></div>
+
+          <div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 text-[11px] text-white">
+            <span class="px-2 py-0.5 rounded-full font-semibold bg-black/65 backdrop-blur-sm">
+              第 {{ ep.episode_number }} 集
+            </span>
+            <div class="flex items-center gap-1.5">
+              {% if ep.tmdb_rating and ep.tmdb_rating > 0 %}
+              <span class="px-2 py-0.5 rounded-full font-semibold bg-black/65 backdrop-blur-sm">★ {{ ep.tmdb_rating }}</span>
+              {% endif %}
+              {% if not ep.playable %}
+              <span class="px-2 py-0.5 rounded-full bg-black/70 text-white/70">未关联文件</span>
+              {% endif %}
+            </div>
+          </div>
+
+          {% if ep.playable %}
+          <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <span class="w-11 h-11 rounded-full bg-white text-black flex items-center justify-center shadow-xl">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 4.5a1.2 1.2 0 0 1 1.82-1.03l11.5 7a1.2 1.2 0 0 1 0 2.06l-11.5 7A1.2 1.2 0 0 1 6 18.5v-14z"/>
+              </svg>
+            </span>
+          </div>
+          {% endif %}
+
+          <div class="absolute bottom-2.5 left-2.5 right-2.5 space-y-1.5">
+            <div class="flex items-center justify-between text-[11px] text-white/85">
+              <span data-ep-status-text="{{ ep.id }}">
+                {% if ep.watched %}已看完{% elif ep.progress_percent_int > 0 %}已看 {{ ep.progress_percent_int }}%{% elif ep.playable %}点击播放{% else %}暂无片源{% endif %}
+              </span>
+              {% if ep.runtime_text %}<span>{{ ep.runtime_text }}</span>{% endif %}
+            </div>
+            <div class="progress-track">
+              <div
+                data-ep-progress-bar="{{ ep.id }}"
+                class="progress-fill-light"
+                style="width: {{ 100 if ep.watched else ep.progress_percent_int }}%;"
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 集标题、简介与手动进度控制 -->
+        <div class="p-4 flex-1 flex flex-col justify-between gap-3">
+          <div class="space-y-1.5">
+            <div class="flex items-start justify-between gap-2">
+              <h3
+                class="text-sm font-bold leading-snug line-clamp-1 {% if ep.playable %}cursor-pointer hover:underline{% endif %}"
+                {% if ep.playable %}data-play-work="{{ work.id }}" data-play-episode="{{ ep.id }}"{% endif %}
+                title="{{ ep.title }}"
+              >
+                {{ ep.episode_number }}. {{ ep.title }}
+              </h3>
+            </div>
+            {% if ep.overview %}
+            <p class="text-xs leading-relaxed line-clamp-2" style="color: var(--text-secondary);">{{ ep.overview }}</p>
+            {% else %}
+            <p class="text-xs" style="color: var(--text-muted);">播出日期：{{ ep.air_date or '未知' }}</p>
+            {% endif %}
+          </div>
+
+          <div class="pt-2 border-t flex items-center justify-between gap-2" style="border-color: var(--border-subtle);">
+            {% if ep.playable %}
+            <button
+              type="button"
+              data-play-work="{{ work.id }}"
+              data-play-episode="{{ ep.id }}"
+              class="btn-primary !py-1 !px-3 text-xs"
+            >
+              播放本集
+            </button>
+            {% else %}
+            <span class="text-xs" style="color: var(--text-muted);">未绑定网盘文件</span>
+            {% endif %}
+
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                data-ep-half-progress="{{ ep.id }}"
+                data-work-id="{{ work.id }}"
+                title="记录观看至一半（50%）"
+                class="btn-ghost !py-1 !px-2 text-xs"
+              >
+                50%
+              </button>
+              <button
+                type="button"
+                data-toggle-watched
+                data-work-id="{{ work.id }}"
+                data-episode-id="{{ ep.id }}"
+                data-current-watched="{{ '1' if ep.watched else '0' }}"
+                class="btn-secondary !py-1 !px-2.5 text-xs"
+              >
+                {% if ep.watched %}✓ 已看{% else %}标为已看{% endif %}
+              </button>
+            </div>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="surface-card p-8 text-center text-sm" style="color: var(--text-secondary);">
+      当前季暂无分集资料，可在后台点击“重新获取资料”刷新。
+    </div>
+    {% endif %}
+  </section>
+
+  {% if work.cast %}
+  <section class="space-y-4">
+    <h2 class="text-lg font-bold tracking-tight">主要演职员</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      {% for person in work.cast %}
+      <div class="surface-card p-3 flex items-center gap-3 min-w-0">
+        <div class="w-12 h-12 rounded-full overflow-hidden shrink-0" style="background-color: var(--bg-elevated);">
+          {% if person.profile_path %}
+          <img src="{{ media_img_url(person.profile_path) }}" alt="{{ person.name }}" loading="lazy" class="w-full h-full object-cover" />
+          {% else %}
+          <div class="w-full h-full flex items-center justify-center text-xs font-bold" style="color: var(--text-muted);">{{ person.name[:1] }}</div>
+          {% endif %}
+        </div>
+        <div class="min-w-0">
+          <div class="text-sm font-semibold truncate">{{ person.name }}</div>
+          <div class="text-xs truncate" style="color: var(--text-muted);">{{ person.character or '演员' }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

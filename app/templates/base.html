@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% if page_title %}{{ page_title }} · {{ site_name }}{% else %}{{ site_name }} · 本机影视资源中心{% endif %}</title>
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("yingku_theme");
+        var theme = (saved === "light" || saved === "dark") ? saved : "dark";
+        document.documentElement.setAttribute("data-theme", theme);
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+</head>
+<body class="min-h-screen flex flex-col">
+  <header class="site-header">
+    <div class="page-container h-full flex items-center justify-between gap-3">
+      <div class="flex items-center gap-6 min-w-0">
+        <a href="{{ '/setup' if hide_main_nav else '/' }}" class="inline-flex items-center gap-2.5 text-base font-bold tracking-tight no-underline shrink-0" style="color: var(--text-primary);">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg" style="background-color: var(--accent); color: var(--accent-fg);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M5.5 4.2a1.5 1.5 0 0 1 2.28-1.28l12.2 7.8a1.5 1.5 0 0 1 0 2.56l-12.2 7.8A1.5 1.5 0 0 1 5.5 19.8V4.2z"/>
+            </svg>
+          </span>
+          <span>影库</span>
+        </a>
+
+        {% if not hide_main_nav %}
+        <nav class="hidden md:flex items-center gap-1" aria-label="主导航">
+          <a href="/" class="nav-link {% if nav_active == 'home' and not (request.args.get('type') in ('movie', 'tv')) %}is-active{% endif %}">首页</a>
+          <a href="/?type=movie" class="nav-link {% if request.args.get('type') == 'movie' or nav_active == 'movies' %}is-active{% endif %}">电影</a>
+          <a href="/?type=tv" class="nav-link {% if request.args.get('type') == 'tv' or nav_active == 'tv' %}is-active{% endif %}">剧集</a>
+          <a href="/import" class="nav-link {% if nav_active == 'import' %}is-active{% endif %}">添加影视</a>
+          <a href="/admin" class="nav-link {% if nav_active == 'admin' %}is-active{% endif %}">后台管理</a>
+          <a href="/settings" class="nav-link {% if nav_active == 'settings' %}is-active{% endif %}">
+            <span>设置</span>
+            {% if has_degraded_optional %}
+            <span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--status-warn-fg);" title="部分选填服务未启用，可随时补填"></span>
+            {% endif %}
+          </a>
+        </nav>
+        {% endif %}
+      </div>
+
+      <div class="flex items-center gap-2.5">
+        {% if not hide_main_nav %}
+        <form action="/" method="get" class="hidden sm:flex items-center relative">
+          <input
+            type="search"
+            name="q"
+            value="{{ request.args.get('q', '') }}"
+            placeholder="搜索片名、原名、简介..."
+            aria-label="搜索影视"
+            class="form-input py-1.5 pl-8 pr-3 text-xs w-44 lg:w-56 rounded-full"
+          />
+          <svg class="w-3.5 h-3.5 absolute left-3 pointer-events-none" style="color: var(--text-muted);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7"></circle>
+            <path d="m20 20-3.5-3.5"></path>
+          </svg>
+        </form>
+        {% endif %}
+
+        <button
+          type="button"
+          id="btn-theme-toggle"
+          class="btn-secondary !px-3 !py-1.5 text-xs"
+          aria-label="切换深色或浅色主题"
+          title="切换深色 / 浅色主题"
+        >
+          <svg id="icon-theme-sun" class="w-4 h-4 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32 1.41-1.41"></path>
+          </svg>
+          <svg id="icon-theme-moon" class="w-4 h-4 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
+          </svg>
+          <span id="label-theme-toggle" class="hidden sm:inline">主题</span>
+        </button>
+
+        {% if not hide_main_nav %}
+        <button
+          type="button"
+          id="btn-mobile-menu"
+          class="btn-secondary !px-2.5 !py-1.5 md:hidden"
+          aria-label="展开导航菜单"
+          aria-expanded="false"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 7h16M4 12h16M4 17h16"></path>
+          </svg>
+        </button>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if not hide_main_nav %}
+    <div id="mobile-nav-drawer" class="hidden md:hidden border-b px-4 py-3 space-y-2.5" style="background-color: var(--bg-surface); border-color: var(--border-subtle);">
+      <form action="/" method="get" class="flex items-center gap-2">
+        <input
+          type="search"
+          name="q"
+          value="{{ request.args.get('q', '') }}"
+          placeholder="搜索影视作品..."
+          class="form-input py-1.5 text-sm"
+        />
+        <button type="submit" class="btn-primary !py-1.5 !px-3.5 text-xs shrink-0">搜索</button>
+      </form>
+      <div class="flex flex-wrap gap-1.5 pt-1">
+        <a href="/" class="nav-link {% if nav_active == 'home' and not request.args.get('type') %}is-active{% endif %}">首页</a>
+        <a href="/?type=movie" class="nav-link {% if request.args.get('type') == 'movie' or nav_active == 'movies' %}is-active{% endif %}">电影</a>
+        <a href="/?type=tv" class="nav-link {% if request.args.get('type') == 'tv' or nav_active == 'tv' %}is-active{% endif %}">剧集</a>
+        <a href="/import" class="nav-link {% if nav_active == 'import' %}is-active{% endif %}">添加影视</a>
+        <a href="/admin" class="nav-link {% if nav_active == 'admin' %}is-active{% endif %}">后台管理</a>
+        <a href="/settings" class="nav-link {% if nav_active == 'settings' %}is-active{% endif %}">设置</a>
+      </div>
+    </div>
+    {% endif %}
+  </header>
+
+  <main class="flex-1 pb-16">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="border-t py-6 text-xs" style="border-color: var(--border-subtle); color: var(--text-muted);">
+    <div class="page-container flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+      <span>影库 · 本机网盘流媒体管理中心（图片与元数据均已本地持久化缓存）</span>
+      <span>支持 AList · TMDB · MDBList · DeepSeek · MPC-HC</span>
+    </div>
+  </footer>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

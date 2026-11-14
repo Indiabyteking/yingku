@@ -1,0 +1,103 @@
+{% macro poster_card(item) %}
+<div class="poster-card group relative">
+  <div class="poster-frame">
+    <a href="{{ item.detail_url }}" class="block w-full h-full no-underline" aria-label="{{ item.display_title }}">
+      {% if item.poster_path %}
+      <img
+        src="{{ media_img_url(item.poster_path) }}"
+        alt="{{ item.display_title }}"
+        loading="lazy"
+        class="w-full h-full object-cover"
+      />
+      {% else %}
+      <div class="w-full h-full flex flex-col items-center justify-center p-4 text-center" style="background: linear-gradient(160deg, var(--bg-elevated), var(--bg-surface));">
+        <span class="text-xs uppercase tracking-widest mb-2" style="color: var(--text-muted);">{{ item.media_type_label }}</span>
+        <span class="text-sm font-semibold line-clamp-3">{{ item.display_title }}</span>
+      </div>
+      {% endif %}
+    </a>
+
+    <div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5 pointer-events-none">
+      <span class="px-2 py-0.5 rounded-full text-[11px] font-medium backdrop-blur-md" style="background: rgba(10,10,12,0.68); color: #f5f5f7;">
+        {{ item.media_type_label }}
+      </span>
+      {% if item.tmdb_rating and item.tmdb_rating > 0 %}
+      <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold backdrop-blur-md" style="background: rgba(10,10,12,0.72); color: #f5f5f7;">
+        ★ {{ item.rating_text }}
+      </span>
+      {% endif %}
+    </div>
+
+    <button
+      type="button"
+      data-play-work="{{ item.id }}"
+      title="调用 MPC-HC 立即播放《{{ item.display_title }}》"
+      aria-label="播放 {{ item.display_title }}"
+      class="absolute bottom-2.5 right-2.5 w-9 h-9 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer border-0 shadow-lg"
+      style="background-color: #ffffff; color: #0b0b0d;"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M6 4.5a1.2 1.2 0 0 1 1.82-1.03l11.5 7a1.2 1.2 0 0 1 0 2.06l-11.5 7A1.2 1.2 0 0 1 6 18.5v-14z"/>
+      </svg>
+    </button>
+  </div>
+
+  <a href="{{ item.detail_url }}" class="mt-2.5 block no-underline min-w-0" style="color: inherit;">
+    <div class="text-sm font-semibold truncate" title="{{ item.display_title }}">{{ item.display_title }}</div>
+    <div class="text-xs truncate mt-0.5" style="color: var(--text-muted);">
+      {% if item.year %}{{ item.year }}{% endif %}
+      {% if item.year and item.genres_short %} · {% endif %}
+      {% if item.genres_short %}{{ item.genres_short }}{% endif %}
+    </div>
+  </a>
+</div>
+{% endmacro %}
+
+
+{% macro continue_card(cw) %}
+{% set item = cw.work %}
+{% set ep = cw.episode %}
+<div class="poster-card group relative">
+  <div class="wide-frame">
+    <a href="{{ item.detail_url }}" class="block w-full h-full no-underline">
+      {% if ep and ep.still_path %}
+      <img src="{{ media_img_url(ep.still_path) }}" alt="{{ item.display_title }}" loading="lazy" class="w-full h-full object-cover" />
+      {% elif item.backdrop_path %}
+      <img src="{{ media_img_url(item.backdrop_path) }}" alt="{{ item.display_title }}" loading="lazy" class="w-full h-full object-cover" />
+      {% elif item.poster_path %}
+      <img src="{{ media_img_url(item.poster_path) }}" alt="{{ item.display_title }}" loading="lazy" class="w-full h-full object-cover" />
+      {% else %}
+      <div class="w-full h-full flex items-center justify-center p-4" style="background: var(--bg-elevated);">
+        <span class="text-sm font-semibold">{{ item.display_title }}</span>
+      </div>
+      {% endif %}
+      <div class="absolute inset-0" style="background: linear-gradient(180deg, rgba(0,0,0,0.08) 20%, rgba(0,0,0,0.78) 100%);"></div>
+    </a>
+
+    <button
+      type="button"
+      data-play-work="{{ item.id }}"
+      {% if cw.resume_episode_id %}data-play-episode="{{ cw.resume_episode_id }}"{% endif %}
+      {% if cw.resume_file_id %}data-play-file="{{ cw.resume_file_id }}"{% endif %}
+      class="absolute bottom-5 right-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer border-0 shadow-md"
+      style="background-color: #ffffff; color: #09090b;"
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M6 4.5a1.2 1.2 0 0 1 1.82-1.03l11.5 7a1.2 1.2 0 0 1 0 2.06l-11.5 7A1.2 1.2 0 0 1 6 18.5v-14z"/>
+      </svg>
+      <span>继续播放</span>
+    </button>
+
+    <div class="absolute left-3 right-28 bottom-5 pointer-events-none text-white min-w-0">
+      <div class="text-sm font-semibold truncate">{{ item.display_title }}</div>
+      <div class="text-xs opacity-80 truncate">{{ cw.subtitle }}</div>
+    </div>
+
+    <div class="absolute left-3 right-3 bottom-2 pointer-events-none">
+      <div class="progress-track">
+        <div class="progress-fill-light" style="width: {{ cw.progress_percent }}%;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}

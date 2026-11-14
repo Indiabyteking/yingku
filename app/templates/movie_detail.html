@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% set work = vm.work %}
+
+{% block content %}
+<!-- 顶部沉浸式电影背景横幅 -->
+<section class="hero-stage !min-h-[420px] sm:!min-h-[520px] flex items-end">
+  {% if work.backdrop_path %}
+  <img src="{{ media_img_url(work.backdrop_path) }}" alt="{{ work.display_title }}" class="absolute inset-0 w-full h-full object-cover object-center" />
+  {% elif work.poster_path %}
+  <img src="{{ media_img_url(work.poster_path) }}" alt="{{ work.display_title }}" class="absolute inset-0 w-full h-full object-cover blur-md opacity-45" />
+  {% endif %}
+  <div class="hero-vignette"></div>
+
+  <div class="page-container relative z-10 py-10 sm:py-14 w-full">
+    <div class="flex flex-col md:flex-row items-start md:items-end gap-7 lg:gap-10">
+      <!-- 竖版海报 -->
+      <div class="w-36 sm:w-48 md:w-56 shrink-0 rounded-2xl overflow-hidden shadow-2xl border border-white/15 bg-black/40">
+        {% if work.poster_path %}
+        <img src="{{ media_img_url(work.poster_path) }}" alt="{{ work.display_title }} 海报" class="w-full aspect-[2/3] object-cover block" />
+        {% else %}
+        <div class="w-full aspect-[2/3] flex items-center justify-center p-4 text-center text-sm font-semibold text-white/80">{{ work.display_title }}</div>
+        {% endif %}
+      </div>
+
+      <!-- 电影主信息（有片名 Logo 时用 Logo 代替纯文字主标题，并保留片名副标） -->
+      <div class="flex-1 min-w-0 space-y-4 text-white">
+        {% if work.logo_path %}
+        <div class="space-y-2">
+          <img
+            src="{{ media_img_url(work.logo_path) }}"
+            alt="{{ work.display_title }}"
+            class="max-h-20 sm:max-h-28 max-w-[280px] sm:max-w-[420px] w-auto object-contain drop-shadow-2xl"
+          />
+          <div class="text-sm sm:text-base font-semibold text-white/85">
+            <span>{{ work.display_title }}</span>
+            {% if work.original_title and work.original_title != work.display_title %}
+            <span class="text-white/60 font-normal"> · {{ work.original_title }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="space-y-1">
+          <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight">{{ work.display_title }}</h1>
+          {% if work.original_title and work.original_title != work.display_title %}
+          <p class="text-sm text-white/65">{{ work.original_title }}</p>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- 年份、时长、类型 -->
+        <div class="flex flex-wrap items-center gap-2.5 text-xs sm:text-sm text-white/85">
+          <span class="px-2.5 py-0.5 rounded-full bg-white/15 font-semibold">电影</span>
+          {% if work.year %}<span>{{ work.year }} 年</span>{% endif %}
+          {% if work.runtime_text %}<span>· {{ work.runtime_text }}</span>{% endif %}
+          {% if work.genres %}
+          <span>· {{ work.genres | join(' / ') }}</span>
+          {% endif %}
+        </div>
+
+        <!-- 多平台评分胶囊 -->
+        <div class="flex flex-wrap items-center gap-2 pt-0.5">
+          {% if work.tmdb_rating and work.tmdb_rating > 0 %}
+          <div class="px-3 py-1 rounded-lg bg-white/14 backdrop-blur-md text-xs font-semibold">
+            <span class="text-white/65 mr-1">TMDB</span>
+            <span>{{ work.rating_text }}</span>
+          </div>
+          {% endif %}
+          {% for r in work.ratings %}
+          <div class="px-3 py-1 rounded-lg bg-white/14 backdrop-blur-md text-xs font-semibold">
+            <span class="text-white/65 mr-1">{{ r.label }}</span>
+            <span>{{ r.display }}</span>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if work.overview %}
+        <p class="text-sm sm:text-base text-white/85 leading-relaxed max-w-3xl">{{ work.overview }}</p>
+        {% endif %}
+
+        <!-- 多版本选择与播放操作区 -->
+        <div class="pt-2 space-y-3" id="movie-playback-box" data-work-id="{{ work.id }}">
+          {% if vm.files|length > 1 %}
+          <div class="space-y-1.5">
+            <div class="text-xs font-medium text-white/70">选择播放版本（共 {{ vm.files|length }} 个片源文件）：</div>
+            <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="选择电影版本">
+              {% for f in vm.files %}
+              <button
+                type="button"
+                data-movie-version-btn="{{ f.id }}"
+                class="px-3.5 py-1.5 rounded-full text-xs font-semibold border transition cursor-pointer {% if loop.first %}bg-white text-black border-white{% else %}bg-white/10 text-white border-white/25 hover:bg-white/20{% endif %}"
+              >
+                <span>{{ f.display_version }}</span>
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+          {% elif vm.files|length == 1 %}
+          <div class="text-xs text-white/65 truncate">
+            片源文件：{{ vm.files[0].filename }}（{{ vm.files[0].display_version }}）
+          </div>
+          {% endif %}
+
+          <div class="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              id="btn-play-selected-movie"
+              data-work-id="{{ work.id }}"
+              data-selected-file-id="{{ vm.files[0].id if vm.files else '' }}"
+              class="hero-play-btn"
+              {% if not vm.files %}disabled{% endif %}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 4.5a1.2 1.2 0 0 1 1.82-1.03l11.5 7a1.2 1.2 0 0 1 0 2.06l-11.5 7A1.2 1.2 0 0 1 6 18.5v-14z"/>
+              </svg>
+              <span>{% if vm.progress_percent > 0 and not vm.watched %}继续播放 ({{ vm.progress_percent }}%){% else %}使用 MPC-HC 播放{% endif %}</span>
+            </button>
+
+            <button
+              type="button"
+              data-toggle-watched
+              data-work-id="{{ work.id }}"
+              data-current-watched="{{ '1' if vm.watched else '0' }}"
+              class="hero-detail-btn cursor-pointer"
+            >
+              <span>{% if vm.watched %}✓ 已看完（点击标为未看）{% else %}标记为已看{% endif %}</span>
+            </button>
+
+            <a href="/admin?work_id={{ work.id }}" class="hero-detail-btn">
+              <span>后台管理</span>
+            </a>
+          </div>
+
+          {% if vm.progress_percent > 0 %}
+          <div class="max-w-md pt-1 space-y-1">
+            <div class="progress-track">
+              <div class="progress-fill-light" style="width: {{ vm.progress_percent }}%;"></div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 片源文件清单与演职员 -->
+<div class="page-container pt-10 space-y-10">
+  {% if vm.files %}
+  <section class="space-y-3">
+    <h2 class="text-lg font-bold tracking-tight">已关联的网盘片源版本</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {% for f in vm.files %}
+      <div class="surface-card p-4 flex items-center justify-between gap-4">
+        <div class="min-w-0 space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded text-xs font-semibold" style="background: var(--bg-subtle);">{{ f.display_version }}</span>
+            <span class="text-sm font-medium truncate" title="{{ f.filename }}">{{ f.filename }}</span>
+          </div>
+          <div class="text-xs font-mono truncate" style="color: var(--text-muted);" title="{{ f.alist_path }}">{{ f.alist_path }}</div>
+        </div>
+        <button
+          type="button"
+          data-play-work="{{ work.id }}"
+          data-play-file="{{ f.id }}"
+          class="btn-secondary !py-1.5 !px-3.5 text-xs shrink-0"
+        >
+          播放此版本
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if work.cast %}
+  <section class="space-y-4">
+    <h2 class="text-lg font-bold tracking-tight">主要演职员</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      {% for person in work.cast %}
+      <div class="surface-card p-3 flex items-center gap-3 min-w-0">
+        <div class="w-12 h-12 rounded-full overflow-hidden shrink-0" style="background-color: var(--bg-elevated);">
+          {% if person.profile_path %}
+          <img src="{{ media_img_url(person.profile_path) }}" alt="{{ person.name }}" loading="lazy" class="w-full h-full object-cover" />
+          {% else %}
+          <div class="w-full h-full flex items-center justify-center text-xs font-bold" style="color: var(--text-muted);">{{ person.name[:1] }}</div>
+          {% endif %}
+        </div>
+        <div class="min-w-0">
+          <div class="text-sm font-semibold truncate">{{ person.name }}</div>
+          <div class="text-xs truncate" style="color: var(--text-muted);">{{ person.character or '演员' }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
