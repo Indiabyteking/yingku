@@ -1,0 +1,21 @@
+# 密钥与本地环境配置
+.env
+agent-benchmark.env
+
+# Python 与虚拟环境
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# 运行期 SQLite 数据库与本地图片缓存
+data/
+instance/
+
+# 前端构建临时目录
+node_modules/
+package-lock.json
