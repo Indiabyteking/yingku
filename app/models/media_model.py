@@ -656,6 +656,22 @@ class MediaRepository:
             )
             return cur.rowcount > 0
 
+    def update_file_version_label(self, file_id: int, work_id: int, version_label: str) -> bool:
+        with connect_sqlite(self.db_path) as conn:
+            cur = conn.execute(
+                "UPDATE media_files SET version_label = ? WHERE id = ? AND work_id = ?",
+                ((version_label or "").strip() or "标准版", int(file_id), int(work_id)),
+            )
+            return cur.rowcount > 0
+
+    def delete_media_file(self, file_id: int, work_id: int) -> bool:
+        with connect_sqlite(self.db_path) as conn:
+            cur = conn.execute(
+                "DELETE FROM media_files WHERE id = ? AND work_id = ?",
+                (int(file_id), int(work_id)),
+            )
+            return cur.rowcount > 0
+
     def update_work_fields(self, work_id: int, fields: dict[str, Any]) -> bool:
         allowed = {
             "custom_title",

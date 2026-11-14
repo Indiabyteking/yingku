@@ -215,10 +215,10 @@ def collapse_cjk_delimiters(text: str) -> tuple[str, bool]:
     # 连续匹配“单字 + 分隔符 + 单字”
     pattern = re.compile(r"(?<=[\u4e00-\u9fff])\s*[·•._\-*/|~\\+\s]\s*(?=[\u4e00-\u9fff])")
     collapsed = pattern.sub("", prev)
-    # 处理如“周·chu·除·三·hai”中汉字与短拼音之间的间隔点
+    # 处理如“周·chu·除·三·hai”中汉字与短拼音之间的间隔符
     mixed_sep = re.compile(
-        r"(?<=[\u4e00-\u9fff])\s*[·•_*|~]\s*(?=[a-zA-Z]{1,5}[\s·•_*|~\u4e00-\u9fff])|"
-        r"(?<=[a-zA-Z])\s*[·•_*|~]\s*(?=[\u4e00-\u9fff])"
+        r"(?<=[\u4e00-\u9fff])\s*[·•_*|~/\\]\s*(?=[a-zA-Z]{1,6}(?:$|[\s·•_*|~/\\\u4e00-\u9fff]))|"
+        r"(?<=[a-zA-Z])\s*[·•_*|~/\\]\s*(?=[\u4e00-\u9fff])"
     )
     collapsed = mixed_sep.sub("", collapsed)
     return collapsed, collapsed != prev
@@ -469,10 +469,11 @@ def restore_obfuscated_title(
     if not text:
         return "", "", False, rules
 
-    # Step A: 还原原始文件名中可能残留的点/星号/空格分隔汉字（在 cleaned_name 上合并单字空格）
-    collapsed, did_collapse = _collapse_spaced_single_cjk(text)
-    if did_collapse:
-        text = collapsed
+    # Step A: 还原原始文件名中可能残留的点/星号/竖线/空格等防和谐分隔符
+    delim_collapsed, did_delim = collapse_cjk_delimiters(text)
+    spaced_collapsed, did_space = _collapse_spaced_single_cjk(delim_collapsed)
+    if did_delim or did_space:
+        text = spaced_collapsed
         is_obfuscated = True
         rules.append("合并插入在片名文字间的分隔符/空格")
 

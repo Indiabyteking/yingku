@@ -269,6 +269,38 @@ class PlaybackService:
             "progress": updated_prog,
         }
 
+    def update_progress_manual(
+        self,
+        *,
+        work_id: int,
+        episode_id: int | None = None,
+        watched: bool | None = None,
+        progress_percent: float | None = None,
+        position_seconds: int | None = None,
+    ) -> dict[str, Any]:
+        work = self._media.get_work(work_id)
+        if not work:
+            raise ExternalServiceError("Library", "未找到该影视作品")
+
+        duration_seconds = int(work.get("runtime") or 0) * 60
+        if work["media_type"] == "tv" and episode_id is not None:
+            eps = self._media.get_episodes(work_id)
+            ep_obj = next((e for e in eps if int(e["id"]) == int(episode_id)), None)
+            if not ep_obj:
+                raise ExternalServiceError("Library", "未找到指定的剧集单集")
+            if ep_obj.get("runtime"):
+                duration_seconds = int(ep_obj["runtime"]) * 60
+
+        updated = self._media.update_watch_progress(
+            work_id=work_id,
+            episode_id=episode_id if work["media_type"] == "tv" else None,
+            position_seconds=position_seconds,
+            duration_seconds=duration_seconds if duration_seconds > 0 else 2700,
+            progress_percent=progress_percent,
+            watched=watched,
+        )
+        return updated
+
     @staticmethod
     def _decorate_work_for_view(work: dict[str, Any]) -> dict[str, Any]:
         d = dict(work)

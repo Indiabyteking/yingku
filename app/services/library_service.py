@@ -15,6 +15,30 @@ from app.models.state_model import LocalStateRepository
 from app.services.recognition_service import RecognitionService
 
 
+PRESET_OBFUSCATED_SAMPLES: list[dict[str, str]] = [
+    {
+        "label": "谐音+拼音+分隔符：周·chu·除·三·hai",
+        "filename": "【先转存防和谐】周·chu·除·三·hai.2023.2160p.WEB-DL.H265.mp4",
+        "parent_path": "/资源/电影分享",
+    },
+    {
+        "label": "夹杂拼音+点号：肖·shen·克·的·jiu·赎",
+        "filename": "【夸克首发】肖·shen·克·的·jiu·赎.1994.4K.HDR.10bit-珍藏版.mkv",
+        "parent_path": "/baidu/我的资源/高分经典",
+    },
+    {
+        "label": "首字母缩写+剧集目录：XDL.S01E01",
+        "filename": "【关注公众号防失联】XDL.S01E01.1080p.BluRay.x265-NEW字幕组.mp4",
+        "parent_path": "/资源/来自：分享/兄弟连",
+    },
+    {
+        "label": "繁简混用+谐音改写：無·堅·道",
+        "filename": "[免费分享严禁商用]無·堅·道.Infernal.Affairs.2002.1080p.国粤双语.mkv",
+        "parent_path": "/baidu/港片合集",
+    },
+]
+
+
 class LibraryService:
     """媒体扫描、入库资料补全、本地图片落盘与后台管理业务服务。"""
 
@@ -57,18 +81,38 @@ class LibraryService:
             "entries": entries,
         }
 
-    def start_scan_task(self, selected_paths: list[str]) -> str:
+    def start_scan_task(
+        self,
+        selected_paths: list[str],
+        filename_overrides: dict[str, str] | None = None,
+    ) -> str:
         task_id = f"scan_{uuid.uuid4().hex[:12]}"
         self._state.create_task(task_id, "scan", total=max(1, len(selected_paths)), summary="正在扫描网盘目录...")
         worker = threading.Thread(
             target=self._run_scan_worker,
-            args=(task_id, list(selected_paths)),
+            args=(task_id, list(selected_paths), dict(filename_overrides or {})),
             daemon=True,
         )
         worker.start()
         return task_id
 
-    def _run_scan_worker(self, task_id: str, selected_paths: list[str]) -> None:
+    def get_task_status(self, task_id: str) -> dict[str, Any] | None:
+        return self._state.get_task(task_id)
+
+    def get_import_presets(self) -> dict[str, Any]:
+        return {
+            "samples": PRESET_OBFUSCATED_SAMPLES,
+            "llm_enabled": self._cfg.settings.llm_ready,
+            "mdblist_enabled": self._cfg.settings.mdblist_ready,
+        }
+
+    def _run_scan_worker(
+        self,
+        task_id: str,
+        selected_paths: list[str],
+        filename_overrides: dict[str, str] | None = None,
+    ) -> None:
+        overrides = filename_overrides or {}
         try:
             video_files = self._alist.collect_video_files(selected_paths)
             if not video_files:
@@ -91,18 +135,20 @@ class LibraryService:
 
             # 同目录下同剧集的多集文件共享作品搜索上下文，提升多集剧识别速度与一致性
             for idx, vf in enumerate(video_files, start=1):
+                effective_filename = (overrides.get(vf["alist_path"]) or vf["filename"]).strip()
                 self._state.update_task(
                     task_id,
                     completed=idx - 1,
-                    current_label=vf["filename"],
-                    summary=f"正在识别 ({idx}/{total})：{vf['filename']}",
+                    current_label=effective_filename,
+                    summary=f"正在识别 ({idx}/{total})：{effective_filename}",
                 )
                 try:
                     rec = self._recognizer.recognize_file(
-                        filename=vf["filename"],
+                        filename=effective_filename,
                         parent_path=vf["parent_path"],
                         alist_path=vf["alist_path"],
                         file_size=vf["size"],
+                        use_cache=vf["alist_path"] not in overrides,
                     )
                 except Exception as exc:
                     # 单个文件出错绝不中断整批扫描
@@ -490,6 +536,145 @@ class LibraryService:
             raise ExternalServiceError("Library", "未找到该影视条目")
         self._media.update_work_fields(work_id, {"custom_title": (custom_title or "").strip()})
         return self._media.get_work(work_id) or work
+
+    def build_admin_list(
+        self,
+        *,
+        search: str = "",
+        media_type: str = "",
+        sort: str = "recent",
+    ) -> dict[str, Any]:
+        all_works = self._media.list_works(sort="recent")
+        filtered = self._media.list_works(
+            media_type=media_type if media_type in ("movie", "tv") else None,
+            search=search,
+            sort=sort if sort in ("recent", "rating", "year", "title") else "recent",
+        )
+        for w in filtered:
+            w["detail_url"] = f"/tv/{w['id']}" if w["media_type"] == "tv" else f"/movies/{w['id']}"
+            w["media_type_label"] = "剧集" if w["media_type"] == "tv" else "电影"
+            w["rating_text"] = f"{float(w['tmdb_rating']):.1f}" if float(w.get("tmdb_rating") or 0) > 0 else "—"
+
+        movie_count = sum(1 for w in all_works if w["media_type"] == "movie")
+        tv_count = sum(1 for w in all_works if w["media_type"] == "tv")
+        unmatched_total = sum(int(w.get("unmatched_file_count") or 0) for w in all_works)
+
+        return {
+            "works": filtered,
+            "stats": {
+                "total": len(all_works),
+                "movies": movie_count,
+                "tv": tv_count,
+                "unmatched_files": unmatched_total,
+            },
+            "filters": {
+                "q": search,
+                "media_type": media_type,
+                "sort": sort,
+            },
+        }
+
+    def build_admin_work_detail(self, work_id: int) -> dict[str, Any] | None:
+        work = self._media.get_work(work_id)
+        if not work:
+            return None
+        work["detail_url"] = f"/tv/{work['id']}" if work["media_type"] == "tv" else f"/movies/{work['id']}"
+        work["media_type_label"] = "剧集" if work["media_type"] == "tv" else "电影"
+
+        seasons = self._media.get_seasons(work_id) if work["media_type"] == "tv" else []
+        episodes = self._media.get_episodes(work_id) if work["media_type"] == "tv" else []
+        files = self._media.get_media_files(work_id)
+        for f in files:
+            f["size_human"] = format_file_size(f["file_size"])
+
+        return {
+            "work": work,
+            "seasons": seasons,
+            "episodes": episodes,
+            "files": files,
+        }
+
+    def map_file_to_episode(
+        self,
+        *,
+        work_id: int,
+        file_id: int,
+        season_number: int | None,
+        episode_number: int | None,
+    ) -> dict[str, Any]:
+        work = self._media.get_work(work_id)
+        if not work:
+            raise ExternalServiceError("Library", "未找到该影视条目")
+        if season_number is not None:
+            self.ensure_season_loaded(work_id, int(season_number))
+        ok = self._media.update_file_episode_mapping(
+            file_id=file_id,
+            work_id=work_id,
+            season_number=season_number,
+            episode_number=episode_number,
+        )
+        if not ok:
+            raise ExternalServiceError("Library", "未找到要调整映射的媒体文件")
+        return self.build_admin_work_detail(work_id) or {"work": work}
+
+    def update_file_version(self, *, work_id: int, file_id: int, version_label: str) -> dict[str, Any]:
+        work = self._media.get_work(work_id)
+        if not work:
+            raise ExternalServiceError("Library", "未找到该影视条目")
+        ok = self._media.update_file_version_label(file_id=file_id, work_id=work_id, version_label=version_label)
+        if not ok:
+            raise ExternalServiceError("Library", "未找到要修改版本标签的媒体文件")
+        return self.build_admin_work_detail(work_id) or {"work": work}
+
+    def attach_alist_file_to_work(
+        self,
+        *,
+        work_id: int,
+        alist_path: str,
+        version_label: str = "",
+        season_number: int | None = None,
+        episode_number: int | None = None,
+    ) -> dict[str, Any]:
+        work = self._media.get_work(work_id)
+        if not work:
+            raise ExternalServiceError("Library", "未找到该影视条目")
+        meta = self._alist.get_item_meta(alist_path)
+        if meta.get("is_dir"):
+            raise ExternalServiceError("AList", "请选择单个视频文件而非文件夹")
+        fname = str(meta.get("name") or posixpath.basename(alist_path))
+        fsize = int(meta.get("size") or 0)
+        if work["media_type"] == "tv" and season_number is not None:
+            self.ensure_season_loaded(work_id, int(season_number))
+        match_st = (
+            "matched"
+            if (work["media_type"] == "movie" or (season_number is not None and episode_number is not None))
+            else "unmatched"
+        )
+        self._media.upsert_media_file(
+            work_id=work_id,
+            alist_path=alist_path,
+            filename=fname,
+            file_size=fsize,
+            version_label=(version_label or "").strip() or "标准版",
+            season_number=season_number if work["media_type"] == "tv" else None,
+            episode_number=episode_number if work["media_type"] == "tv" else None,
+            match_status=match_st,
+        )
+        if work["media_type"] == "tv":
+            self._media.rebind_episode_files_for_work(work_id)
+        return self.build_admin_work_detail(work_id) or {"work": work}
+
+    def remove_media_file(self, *, work_id: int, file_id: int) -> dict[str, Any]:
+        work = self._media.get_work(work_id)
+        if not work:
+            raise ExternalServiceError("Library", "未找到该影视条目")
+        ok = self._media.delete_media_file(file_id=file_id, work_id=work_id)
+        if not ok:
+            raise ExternalServiceError("Library", "未找到要移除的媒体文件")
+        return self.build_admin_work_detail(work_id) or {"work": work}
+
+    def delete_work(self, work_id: int) -> bool:
+        return self._media.delete_work(work_id)
 
     def ensure_season_loaded(self, work_id: int, season_number: int) -> None:
         """若用户切换到某季且该季尚未抓取单集详情，自动从 TMDB 补抓并缓存剧照。"""
